@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+python-multipart
+google-genai
+gspread
+google-api-python-client
+oauth2client
+pydantic

@@ -69,7 +69,15 @@ def upload_to_drive_background(file_path: str, file_name: str, mime_type: str):
         drive_service = get_drive_service()
         file_metadata = {'name': file_name, 'parents': [DRIVE_FOLDER_ID]}
         media = MediaFileUpload(file_path, mimetype=mime_type, resumable=True)
-        drive_service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+        
+        # 🔧【重點修正】：加入 supportsAllDrives=True 才能存取「共用雲端硬碟」
+        drive_service.files().create(
+            body=file_metadata, 
+            media_body=media, 
+            fields='id',
+            supportsAllDrives=True 
+        ).execute()
+        
         print(f"✅ Google Drive 備份成功: {file_name}")
     except Exception as e:
         print(f"❌ Google Drive 備份失敗: {e}")
@@ -77,7 +85,6 @@ def upload_to_drive_background(file_path: str, file_name: str, mime_type: str):
         # 上傳完畢後刪除本機暫存檔
         if os.path.exists(file_path):
             os.remove(file_path)
-
 # ═══════════════════════════════════════════════════
 # Gemini 處理函式
 # ═══════════════════════════════════════════════════

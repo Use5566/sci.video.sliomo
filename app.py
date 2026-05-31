@@ -19,10 +19,10 @@ from google.genai import types
 # ═══════════════════════════════════════════════════
 # 系統環境變數與常數設定
 # ═══════════════════════════════════════════════════
-# 這些變數未來都要在 Zeabur 的 Environment Variables 中設定
+# 這些變數未來都要在 Render 的 Environment Variables 中設定
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-SPREADSHEET_ID = os.environ.get("SPREADSHEET_ID") # 您的試算表 ID
-DRIVE_FOLDER_ID = '1VFOuw3qSp2RJLhmHe0RogmcV6kxMo5EO'
+SPREADSHEET_ID = os.environ.get("SPREADSHEET_ID")
+DRIVE_FOLDER_ID = os.environ.get("DRIVE_FOLDER_ID") # 已改為環境變數
 MODEL_NAME = "gemini-2.5-flash"
 
 app = FastAPI()
@@ -35,6 +35,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 可選：首頁路由，讓您點擊網址不會看到 404
+@app.get("/")
+async def root():
+    return {"message": "Silomo API 伺服器運作正常！🐾"}
 
 # ═══════════════════════════════════════════════════
 # 授權與認證函式
@@ -85,6 +90,7 @@ def upload_to_drive_background(file_path: str, file_name: str, mime_type: str):
         # 上傳完畢後刪除本機暫存檔
         if os.path.exists(file_path):
             os.remove(file_path)
+
 # ═══════════════════════════════════════════════════
 # Gemini 處理函式
 # ═══════════════════════════════════════════════════
@@ -249,13 +255,25 @@ async def chat(req: ChatRequest):
         contents = []
         gemini_file = req.userInfo.get("geminiFile")
         
-        # 重建對話歷史
+        # 🔧【重點修正】：使用 SDK 專屬的 types.Content 與 types.Part 解決 Pydantic 錯誤
         for idx, item in enumerate(req.conversationHistory):
             parts = []
+            
+            # 第一回合的 user 訊息，加入影片實體
             if idx == 0 and item["role"] == "user" and gemini_file:
-                parts.append(types.Part.from_uri(file_uri=gemini_file["uri"], mime_type=gemini_file["mimeType"]))
-            parts.append(item["parts"])
-            contents.append({"role": "user" if item["role"] == "user" else "model", "parts": parts})
+                parts.append(
+                    types.Part.from_uri(
+                        file_uri=gemini_file["uri"], 
+                        mime_type=gemini_file["mimeType"]
+                    )
+                )
+            
+            # 加入文字訊息
+            parts.append(types.Part.from_text(text=item["parts"]))
+            
+            # 組裝成標準的 Content 物件
+            role = "user" if item["role"] == "user" else "model"
+            contents.append(types.Content(role=role, parts=parts))
             
         ai_res = call_gemini(system_instruction, contents)
         
@@ -287,13 +305,11 @@ async def chat(req: ChatRequest):
             in_tok = ai_res["input_tokens"]
             out_tok = ai_res["output_tokens"]
             
-            # 更新對應欄位 (turnCount=1 是 F~I欄，turnCount=2 是 J~M欄)
             if req.turnCount == 1:
                 sheet.update(f"F{target_row}:I{target_row}", [[req.message, sheet_reply, in_tok, out_tok]])
             elif req.turnCount == 2:
                 sheet.update(f"J{target_row}:M{target_row}", [[req.message, sheet_reply, in_tok, out_tok]])
                 
-            # 更新 Total Tokens (N, O欄)
             current_in = int(all_records[target_row-1][13]) if len(all_records[target_row-1]) > 13 and all_records[target_row-1][13] else 0
             current_out = int(all_records[target_row-1][14]) if len(all_records[target_row-1]) > 14 and all_records[target_row-1][14] else 0
             sheet.update(f"N{target_row}:O{target_row}", [[current_in + in_tok, current_out + out_tok]])

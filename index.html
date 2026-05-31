@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chat Silomo</title>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg-main:     #2d5a3d;
+      --bg-deep:     #1e3d2a;
+      --cream:       #fdf8f2;
+      --warm-white:  #ffffff;
+      --text-dark:   #2d1f0e;
+      --text-mid:    #6b5240;
+      --text-muted:  #a08870;
+      --user-bubble: #fde9b8;
+      --ai-bubble:   #ffffff;
+      --shadow-soft: 0 2px 12px rgba(20,50,30,0.18);
+      --shadow-card: 0 8px 32px rgba(20,50,30,0.28);
+      --green-mid:   #3d7a52;
+      --green-light: #4a9463;
+    }
+
+    body {
+      font-family: 'Noto Sans TC', 'Nunito', sans-serif;
+      background: var(--bg-main);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 10px;
+    }
+
+    /* ══════════════ LOGIN ══════════════ */
+    #login-screen {
+      width: 100%;
+      max-width: 650px;
+      background: var(--warm-white);
+      border-radius: 28px;
+      padding: 36px 48px;
+      box-shadow: var(--shadow-card);
+      animation: fadeUp 0.55s cubic-bezier(.22,1,.36,1) both;
+      position: relative;
+      overflow: hidden;
+    }
+    #login-screen::before {
+      content: ''; position: absolute; top: -40px; right: -40px;
+      width: 160px; height: 160px; background: radial-gradient(circle, #e8f5ee 0%, transparent 70%);
+      border-radius: 50%; pointer-events: none;
+    }
+    @keyframes fadeUp {
+      from { opacity:0; transform:translateY(28px) scale(0.97); }
+      to   { opacity:1; transform:translateY(0) scale(1); }
+    }
+
+    .login-hero {
+      display: flex; flex-direction: column; align-items: center;
+      margin-bottom: 16px;
+    }
+    
+    .avatar-icon-lg {
+      width: 70px; height: 70px;
+      background: var(--green-light); border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 4px 12px rgba(61,122,82,0.3); padding: 8px;
+    }
+
+    .login-hero h1 {
+      font-family: 'Nunito', sans-serif; font-size: 1.8rem; font-weight: 800;
+      color: var(--text-dark); margin-top: 12px; letter-spacing: -0.02em;
+    }
+    .login-hero h1 span { color: var(--green-mid); }
+    .login-hero p { font-size: 0.85rem; color: var(--text-muted); margin-top: 2px; }
+
+    .field-label {
+      font-size: 0.75rem; font-weight: 700; color: var(--text-mid);
+      letter-spacing: 0.07em; text-transform: uppercase;
+      margin-bottom: 6px; margin-top: 14px; display: block;
+    }
+
+    .btn-group { display: flex; flex-wrap: wrap; gap: 8px; }
+    .sel-btn {
+      padding: 7px 18px; border: 1.5px solid #e8d5bb; border-radius: 20px;
+      background: var(--cream); color: var(--text-mid); font-size: 0.88rem; font-weight: 600;
+      cursor: pointer; transition: all 0.18s; flex-grow: 1;
+      text-align: center;
+    }
+    .sel-btn:hover { border-color: var(--green-mid); color: var(--green-mid); background: #e8f5ee; }
+    .sel-btn.active { background: var(--green-mid); border-color: var(--green-mid); color: #fff; box-shadow: 0 2px 8px rgba(61,122,82,0.35); }
+
+    .seat-group { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-start; }
+    .seat-btn {
+      width: 38px; height: 32px;
+      border: 1.5px solid #e8d5bb; border-radius: 8px;
+      background: var(--cream); color: var(--text-mid); font-size: 0.78rem; font-weight: 600;
+      cursor: pointer; transition: all 0.15s; display: flex; align-items: center; justify-content: center;
+    }
+    .seat-btn:hover { border-color: var(--green-mid); color: var(--green-mid); background: #e8f5ee; }
+    .seat-btn.active { background: var(--green-mid); border-color: var(--green-mid); color: #fff; }
+
+    .file-input {
+      width: 100%; padding: 8px 12px; border: 1.5px dashed #b5d4c0; border-radius: 12px;
+      font-size: 0.9rem; color: var(--text-dark); background: var(--cream);
+      outline: none; transition: border-color 0.2s; cursor: pointer;
+    }
+    .file-input:hover { border-color: var(--green-mid); background: #e8f5ee; }
+
+    .consent-group {
+      margin-top: 16px; display: flex; flex-direction: column; gap: 8px;
+      background: #f9f9f9; padding: 12px 16px; border-radius: 12px; border: 1px dashed #e0e0e0;
+    }
+    .consent-title {
+      font-size: 0.85rem; font-weight: 700; color: var(--text-dark); 
+      margin-bottom: 4px; border-bottom: 1px solid #eaeaea; padding-bottom: 6px;
+    }
+    .consent-label {
+      display: flex; align-items: flex-start; font-size: 0.85rem; color: var(--text-mid);
+      cursor: pointer; line-height: 1.4; font-weight: 600;
+    }
+    .consent-label input[type="checkbox"] {
+      margin-right: 10px; margin-top: 2px; width: 16px; height: 16px;
+      accent-color: var(--green-mid); cursor: pointer; flex-shrink: 0;
+    }
+
+    #login-btn {
+      width: 100%; padding: 14px; margin-top: 18px;
+      background: var(--green-mid); color: #fff;
+      font-size: 1rem; font-weight: 800; border: none; border-radius: 16px;
+      cursor: pointer; letter-spacing: 0.04em;
+      transition: background 0.2s, transform 0.12s, box-shadow 0.2s;
+      box-shadow: 0 4px 16px rgba(61,122,82,0.35);
+    }
+    #login-btn:hover  { background: var(--bg-deep); }
+    #login-btn:active { transform: scale(0.98); }
+
+    /* ══════════════ CHAT ══════════════ */
+    #chat-screen {
+      display: none;
+      flex-direction: column;
+      width: 100%; 
+      max-width: 850px;
+      height: 100vh;
+      background: var(--warm-white);
+      box-shadow: var(--shadow-card);
+    }
+
+    @media (min-width: 768px) {
+      #chat-screen {
+        height: 92vh;
+        border-radius: 24px;
+        overflow: hidden;
+      }
+      body { padding: 20px; }
+    }
+
+    .chat-header {
+      background: linear-gradient(135deg, #2d5a3d 0%, #1e3d2a 100%);
+      border-bottom: 1.5px solid #1a3325;
+      padding: 14px 24px; display: flex; align-items: center; gap: 14px;
+    }
+    .header-name-block { flex: 1; }
+    .header-title { font-size: 1.2rem; font-weight: 800; color: #ffffff; }
+    .header-title span { color: #7fcf9a; }
+    .header-sub { font-size: 0.8rem; color: #9ecfb0; margin-top: 2px; }
+
+    .turn-badge {
+      background: rgba(255,255,255,0.15); border: 1.5px solid rgba(255,255,255,0.25);
+      border-radius: 20px; padding: 4px 14px; font-size: 0.85rem; font-weight: 700; color: #c5ecd5;
+    }
+
+    #chat-history {
+      flex: 1; overflow-y: auto; padding: 24px 20px; background: #f0f7f2;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    #chat-history::-webkit-scrollbar { width: 6px; }
+    #chat-history::-webkit-scrollbar-thumb { background: #b5d4c0; border-radius: 6px; }
+
+    .bubble-row { display: flex; align-items: flex-end; gap: 10px; animation: popIn 0.22s ease-out both; }
+    .bubble-row.user-row { flex-direction: row-reverse; }
+
+    @keyframes popIn {
+      from { opacity:0; transform:scale(0.95) translateY(8px); }
+      to   { opacity:1; transform:scale(1) translateY(0); }
+    }
+
+    .bubble {
+      max-width: 75%; padding: 12px 18px; border-radius: 18px; line-height: 1.7;
+      font-size: 0.95rem; word-wrap: break-word; box-shadow: var(--shadow-soft);
+    }
+    .user-bubble { background: var(--green-mid); border-bottom-right-radius: 4px; color: #ffffff; }
+    .ai-bubble { background: var(--ai-bubble); border-bottom-left-radius: 4px; color: var(--text-dark); border: 1px solid #d4e8da; }
+    .ai-bubble p  { margin-bottom: 8px; }
+    .ai-bubble p:last-child { margin-bottom: 0; }
+    .ai-bubble ul { margin: 6px 0 0 18px; }
+    .ai-bubble li { margin-bottom: 7px; }
+
+    .typing-indicator { color: var(--text-muted); font-style: italic; font-size: 0.85rem; }
+
+    .avatar-icon-sm {
+      width: 38px; height: 38px; flex-shrink: 0; border-radius: 50%; padding: 4px;
+      background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .user-avatar {
+      width: 36px; height: 36px; flex-shrink: 0; border-radius: 50%;
+      background: var(--green-light); border: 1.5px solid var(--green-mid);
+      display: flex; align-items: center; justify-content: center; font-size: 16px;
+    }
+
+    #status-msg {
+      display: none; text-align: center; font-size: 0.9rem; color: #1e4a2a;
+      background: #c5e8d0; padding: 10px 16px; border-top: 1px solid #9ecfb0; font-weight: 600;
+    }
+
+    .input-area {
+      display: flex; align-items: center; padding: 14px 18px;
+      background: #e8f5ee; border-top: 1.5px solid #b5d4c0; gap: 12px;
+    }
+    .input-area input[type="text"] {
+      flex: 1; padding: 12px 20px; border: 1.5px solid #b5d4c0; border-radius: 24px;
+      font-size: 1rem; background: var(--warm-white); outline: none; color: var(--text-dark);
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .input-area input[type="text"]:focus { border-color: var(--green-mid); box-shadow: 0 0 0 3px rgba(61,122,82,0.12); }
+    .input-area input[type="text"]:disabled { background: #d4eadb; cursor: not-allowed; color: var(--text-muted); }
+
+    #send-btn {
+      width: 48px; height: 48px; flex-shrink: 0; background: var(--green-mid); color: #fff;
+      border: none; border-radius: 50%; font-size: 18px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.18s, transform 0.1s, box-shadow 0.18s;
+      box-shadow: 0 3px 10px rgba(61,122,82,0.35);
+    }
+    #send-btn:hover  { background: var(--bg-deep); }
+    #send-btn:active { transform: scale(0.92); }
+    #send-btn:disabled { background: #b5d4c0; box-shadow: none; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+
+<div id="login-screen">
+  <div class="login-hero">
+    <div class="avatar-icon-lg">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100%" height="100%">
+        <path d="M15 15 L32 35 Q50 28 68 35 L85 15 L78 42 Q92 65 75 85 Q50 95 25 85 Q8 65 22 42 Z" fill="#ffffff" stroke="#dcdcdc" stroke-width="3" stroke-linejoin="round"/>
+        <circle cx="38" cy="55" r="7" fill="#FFD700" />
+        <circle cx="62" cy="55" r="7" fill="#FFD700" />
+        <ellipse cx="38" cy="55" rx="2" ry="6" fill="#222" />
+        <ellipse cx="62" cy="55" rx="2" ry="6" fill="#222" />
+        <path d="M47 68 L53 68 L50 73 Z" fill="#FFA07A" />
+      </svg>
+    </div>
+    <h1>Chat <span>Silomo</span></h1>
+    <p>你的AI學習夥伴</p>
+  </div>
+
+  <span class="field-label">年級</span>
+  <div class="btn-group" id="grade-group">
+    <button class="sel-btn" onclick="selectGrade(this,3)">3年級</button>
+    <button class="sel-btn" onclick="selectGrade(this,4)">4年級</button>
+    <button class="sel-btn" onclick="selectGrade(this,5)">5年級</button>
+    <button class="sel-btn" onclick="selectGrade(this,6)">6年級</button>
+  </div>
+
+  <span class="field-label">班級</span>
+  <div class="btn-group" id="class-group">
+    <button class="sel-btn" onclick="selectClass(this,1)">1班</button>
+    <button class="sel-btn" onclick="selectClass(this,2)">2班</button>
+    <button class="sel-btn" onclick="selectClass(this,3)">3班</button>
+    <button class="sel-btn" onclick="selectClass(this,4)">4班</button>
+    <button class="sel-btn" onclick="selectClass(this,5)">5班</button>
+  </div>
+
+  <span class="field-label">組員 (最多4位)</span>
+  <div class="seat-group" id="member-group"></div>
+
+  <span class="field-label">上傳影片</span>
+  <input class="file-input" type="file" id="video-upload" accept="video/*">
+
+  <div class="consent-group">
+    <div class="consent-title">進入Chat Silomo前，請勾選確認下列注意事項。</div>
+    <label class="consent-label">
+      <input type="checkbox" id="consent-ai">
+      <span>Chat Silomo是AI，可能會出錯。</span>
+    </label>
+    <label class="consent-label">
+      <input type="checkbox" id="consent-record">
+      <span>你與Chat Silomo的對話紀錄，老師都可以查閱。</span>
+    </label>
+  </div>
+
+  <button id="login-btn" onclick="startChat()">進入 Chat Silomo</button>
+</div>
+
+<div id="chat-screen">
+  <div class="chat-header">
+    <div class="avatar-icon-sm" style="box-shadow:none; padding: 0;">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100%" height="100%">
+        <path d="M15 15 L32 35 Q50 28 68 35 L85 15 L78 42 Q92 65 75 85 Q50 95 25 85 Q8 65 22 42 Z" fill="#ffffff" stroke="#dcdcdc" stroke-width="3" stroke-linejoin="round"/>
+        <circle cx="38" cy="55" r="7" fill="#FFD700" />
+        <circle cx="62" cy="55" r="7" fill="#FFD700" />
+        <ellipse cx="38" cy="55" rx="2" ry="6" fill="#222" />
+        <ellipse cx="62" cy="55" rx="2" ry="6" fill="#222" />
+        <path d="M47 68 L53 68 L50 73 Z" fill="#FFA07A" />
+      </svg>
+    </div>
+    <div class="header-name-block">
+      <div class="header-title">Chat <span>Silomo</span></div>
+      <div class="header-sub" id="display-user"></div>
+    </div>
+    <div class="turn-badge" id="turn-badge">第 1 / 2 次</div>
+  </div>
+
+  <div id="chat-history"></div>
+  
+  <div id="status-msg"></div>
+
+  <div class="input-area">
+    <input type="text" id="chat-input" placeholder="請輸入您的問題…">
+    <button id="send-btn" onclick="sendMessage()">➤</button>
+  </div>
+</div>
+
+<script>
+  // ⚠️ 未來您的 FastAPI 後端部署好之後，請將這行替換為您在 Zeabur 的實際網址
+  const BACKEND_URL = "https://your-zeabur-app-url.zeabur.app"; 
+
+  let selectedGrade = 0;
+  let selectedClass = 0;
+  let selectedMembers = []; 
+  let userInfo = {};
+  let turnCount = 1;
+  let conversationHistory = [];
+  const MAX_TURNS = 2; 
+
+  const catSvgString = `
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100%" height="100%">
+      <path d="M15 15 L32 35 Q50 28 68 35 L85 15 L78 42 Q92 65 75 85 Q50 95 25 85 Q8 65 22 42 Z" fill="#ffffff" stroke="#dcdcdc" stroke-width="3" stroke-linejoin="round"/>
+      <circle cx="38" cy="55" r="7" fill="#FFD700" />
+      <circle cx="62" cy="55" r="7" fill="#FFD700" />
+      <ellipse cx="38" cy="55" rx="2" ry="6" fill="#222" />
+      <ellipse cx="62" cy="55" rx="2" ry="6" fill="#222" />
+      <path d="M47 68 L53 68 L50 73 Z" fill="#FFA07A" />
+    </svg>`;
+
+  (function buildMembers() {
+    const g = document.getElementById('member-group');
+    for (let i = 1; i <= 32; i++) {
+      const btn = document.createElement('button');
+      btn.className = 'seat-btn';
+      const formattedNum = String(i).padStart(2, '0'); 
+      btn.textContent = formattedNum;
+      btn.onclick = () => toggleMember(btn, formattedNum);
+      g.appendChild(btn);
+    }
+  })();
+
+  function selectGrade(btn, val) {
+    document.querySelectorAll('#grade-group .sel-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    selectedGrade = val;
+  }
+  function selectClass(btn, val) {
+    document.querySelectorAll('#class-group .sel-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    selectedClass = val;
+  }
+  
+  function toggleMember(btn, val) {
+    if (selectedMembers.includes(val)) {
+      selectedMembers = selectedMembers.filter(m => m !== val);
+      btn.classList.remove('active');
+    } else {
+      if (selectedMembers.length >= 4) {
+        alert('最多只能選擇四位組員！');
+        return;
+      }
+      selectedMembers.push(val);
+      btn.classList.add('active');
+    }
+    selectedMembers.sort();
+  }
+
+  function formatClassNum() {
+    return `${selectedGrade}0${selectedClass}`;
+  }
+
+  function generateVideoName(classNum, membersString, file) {
+    const now = new Date();
+    const datetime = now.getFullYear().toString() +
+                     String(now.getMonth() + 1).padStart(2, '0') +
+                     String(now.getDate()).padStart(2, '0') + "_" +
+                     String(now.getHours()).padStart(2, '0') +
+                     String(now.getMinutes()).padStart(2, '0') +
+                     String(now.getSeconds()).padStart(2, '0');
+    
+    const extension = file.name.split('.').pop();
+    return `${classNum}_${membersString}_${datetime}.${extension}`;
+  }
+
+  // 修改：改用 HTML5 FormData 與 fetch 呼叫 Python 後端
+  function startChat() {
+    if (!selectedGrade) { alert('請選擇年級！'); return; }
+    if (!selectedClass) { alert('請選擇班級！'); return; }
+    if (selectedMembers.length === 0) { alert('請選擇至少一位組員！'); return; }
+    
+    const videoInput = document.getElementById('video-upload');
+    if (videoInput.files.length === 0) { alert('請上傳影片！'); return; }
+
+    const file = videoInput.files[0];
+    if (file.size > 30 * 1024 * 1024) {
+      alert(`為了確保系統穩定，影片大小請勿超過 30MB！\n目前檔案大小：${(file.size / 1024 / 1024).toFixed(1)} MB`);
+      return;
+    }
+
+    const checkAI = document.getElementById('consent-ai').checked;
+    const checkRecord = document.getElementById('consent-record').checked;
+    if (!checkAI || !checkRecord) {
+      alert('請詳閱並勾選所有的注意事項，才能進入 Chat Silomo！');
+      return;
+    }
+
+    const classNum = formatClassNum();
+    const membersJoinedForName = selectedMembers.join(''); 
+    const membersDisplay = selectedMembers.join(', ');
+    const videoName = generateVideoName(classNum, membersJoinedForName, file);
+
+    userInfo = { 
+      classNum: classNum, 
+      members: membersDisplay, 
+      videoName: videoName     
+    };
+    
+    document.getElementById('display-user').innerText = `${classNum} 班・組員: ${membersDisplay}`;
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('chat-screen').style.display  = 'flex';
+
+    const input   = document.getElementById('chat-input');
+    const sendBtn = document.getElementById('send-btn');
+    input.disabled   = true;
+    sendBtn.disabled = true;
+    input.placeholder = '影片上傳與分析中，請稍候（可能需要數十秒）…';
+
+    const loadingRow = addLoadingBubble('Silomo 正在上傳與分析影片中，請稍候...');
+
+    // 【全新升級】：使用 FormData 傳送原始二進位檔案，不再使用 FileReader 轉換 Base64！
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('classNum', userInfo.classNum);
+    formData.append('members', userInfo.members);
+    formData.append('videoName', userInfo.videoName);
+
+    // 呼叫 Zeabur Python 後端 API
+    fetch(`${BACKEND_URL}/analyze-video`, {
+      method: 'POST',
+      body: formData
+    })
+    .then(response => response.json())
+    .then(res => {
+      loadingRow.remove();
+
+      if (res.status === 'success') {
+        userInfo.geminiFile = res.gemini_file; 
+        conversationHistory.push({ role: "user", parts: `[上傳了實驗影片：${userInfo.videoName}]` });
+        
+        let analysisHtml = `<p><b>🎬 影片分析結果：</b></p>
+                            ${res.video_analysis_html}
+                            <hr style="border:0; border-top:1px dashed #b5d4c0; margin:12px 0;">
+                            <p>你好！我已完成影片分析。這次學習任務你有 <b>2 次</b>對話機會！請針對影片內容開始提問吧！</p>`;
+        
+        addAiBubble(analysisHtml, true);
+        conversationHistory.push({ role: "model", parts: "[影片分析結果]\n" + res.video_analysis_text });
+
+        input.disabled   = false;
+        sendBtn.disabled = false;
+        input.placeholder = '請輸入您的問題…';
+        input.focus();
+      } else {
+        addAiBubble('操作失敗：' + res.message, false);
+      }
+    })
+    .catch(err => {
+      loadingRow.remove();
+      addAiBubble('系統連線失敗，請檢查後端網址是否正確或稍後再試。', false);
+      console.error(err);
+    });
+  }
+
+  function addAiBubble(content, isHTML) {
+    const history = document.getElementById('chat-history');
+    const row = document.createElement('div');
+    row.className = 'bubble-row';
+
+    const avatar = document.createElement('div');
+    avatar.className = 'avatar-icon-sm';
+    avatar.innerHTML = catSvgString;
+
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble ai-bubble';
+    if (isHTML) bubble.innerHTML = content;
+    else        bubble.innerText  = content;
+
+    row.appendChild(avatar);
+    row.appendChild(bubble);
+    history.appendChild(row);
+    history.scrollTop = history.scrollHeight;
+    return row;
+  }
+
+  function addUserBubble(content) {
+    const history = document.getElementById('chat-history');
+    const row = document.createElement('div');
+    row.className = 'bubble-row user-row';
+
+    const avatar = document.createElement('div');
+    avatar.className = 'user-avatar';
+    avatar.textContent = '🐾';
+
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble user-bubble';
+    bubble.innerText = content;
+
+    row.appendChild(avatar);
+    row.appendChild(bubble);
+    history.appendChild(row);
+    history.scrollTop = history.scrollHeight;
+  }
+
+  function addLoadingBubble(customText) {
+    const history = document.getElementById('chat-history');
+    const row = document.createElement('div');
+    row.className = 'bubble-row';
+
+    const avatar = document.createElement('div');
+    avatar.className = 'avatar-icon-sm';
+    avatar.innerHTML = catSvgString;
+
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble ai-bubble typing-indicator';
+    bubble.innerText = customText || 'Silomo 正在思考中…';
+
+    row.appendChild(avatar);
+    row.appendChild(bubble);
+    history.appendChild(row);
+    history.scrollTop = history.scrollHeight;
+    return row;
+  }
+
+  function updateBadge() {
+    const badge = document.getElementById('turn-badge');
+    if (turnCount > MAX_TURNS) {
+      badge.textContent = '已結束';
+      badge.style.background = 'rgba(255,255,255,0.08)';
+      badge.style.color = '#f0c0a0';
+    } else {
+      badge.textContent = `第 ${turnCount} / ${MAX_TURNS} 次`;
+    }
+  }
+
+  // 修改：改用 JSON 與 fetch 呼叫 Python 後端的聊天 API
+  function sendMessage() {
+    if (turnCount > MAX_TURNS) return;
+
+    const input   = document.getElementById('chat-input');
+    const sendBtn = document.getElementById('send-btn');
+    const msg     = input.value.trim();
+    if (!msg) return;
+
+    input.value = '';
+    input.disabled   = true;
+    sendBtn.disabled = true;
+
+    addUserBubble(msg);
+    const loadingRow = addLoadingBubble('Silomo 正在思考中…');
+
+    conversationHistory.push({ role: "user", parts: msg });
+
+    // 組合要傳給後端的 JSON 資料
+    const payload = {
+      userInfo: userInfo,
+      message: msg,
+      turnCount: turnCount,
+      conversationHistory: conversationHistory
+    };
+
+    fetch(`${BACKEND_URL}/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    })
+    .then(response => response.json())
+    .then(res => {
+      loadingRow.remove();
+
+      if (res.status === 'success') {
+        let finalHtml = "";
+        try {
+          const aiData = JSON.parse(res.ai_response);
+          if (aiData.summary) {
+            finalHtml += `<p>${aiData.summary}</p>`;
+          }
+          if (aiData.details && Array.isArray(aiData.details) && aiData.details.length > 0) {
+            finalHtml += "<ul>";
+            aiData.details.forEach(item => {
+              if (item.point && item.description) {
+                finalHtml += `<li><b>${item.point}：</b>${item.description}</li>`;
+              }
+            });
+            finalHtml += "</ul>";
+          }
+          if (!finalHtml) finalHtml = res.ai_response.replace(/\n/g, '<br>');
+        } catch (e) {
+          finalHtml = res.ai_response.replace(/\n/g, '<br>');
+        }
+
+        addAiBubble(finalHtml, true);
+        conversationHistory.push({ role: "model", parts: res.ai_response });
+
+        turnCount++;
+        updateBadge();
+
+        if (turnCount > MAX_TURNS) {
+          const statusBox = document.getElementById('status-msg');
+          statusBox.innerText = '⚠️ 已達到本次任務的 2 次互動上限，無法繼續發問。';
+          statusBox.style.display = 'block';
+          input.placeholder = '互動已結束';
+        } else {
+          input.disabled   = false;
+          sendBtn.disabled = false;
+          input.focus();
+        }
+
+      } else {
+        addAiBubble('發生錯誤：' + res.message, false);
+        conversationHistory.pop();
+        input.disabled   = false;
+        sendBtn.disabled = false;
+      }
+    })
+    .catch(err => {
+      loadingRow.remove();
+      addAiBubble('系統連線失敗，請稍後再試。', false);
+      conversationHistory.pop();
+      input.disabled   = false;
+      sendBtn.disabled = false;
+      console.error(err);
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('chat-input')
+      .addEventListener('keydown', e => {
+        if (e.key === 'Enter' && !e.shiftKey) sendMessage();
+      });
+  });
+</script>
+</body>
+</html>

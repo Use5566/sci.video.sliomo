@@ -27,10 +27,13 @@ MODEL_NAME = "gemini-2.5-flash"
 
 app = FastAPI()
 
-# 設定 CORS，允許您的 GitHub Pages 前端呼叫
+# 取得您 GitHub Pages 的實際網址，例如：https://use5566.github.io
+# 請將下方的網址換成您自己部署出來的 GitHub Pages 網址！
+ALLOWED_URL = "https://use5566.github.io/sci.video.sliomo" 
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # 實務上可改為您的 GitHub Pages 網址
+    allow_origins=[ALLOWED_URL], # 🔧 嚴格限制只有這個網址可以呼叫後端
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

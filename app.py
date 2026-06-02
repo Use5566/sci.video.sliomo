@@ -3,6 +3,7 @@ import time
 import json
 import tempfile
 import asyncio
+import gc  # 🔧 新增：用來強制回收記憶體
 from datetime import datetime
 
 from fastapi import FastAPI, File, UploadFile, Form, BackgroundTasks, HTTPException
@@ -19,15 +20,17 @@ from google.genai import types
 # ═══════════════════════════════════════════════════
 # 系統環境變數與常數設定
 # ═══════════════════════════════════════════════════
-# 這些變數未來都要在 Render 的 Environment Variables 中設定
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 SPREADSHEET_ID = os.environ.get("SPREADSHEET_ID")
-DRIVE_FOLDER_ID = os.environ.get("DRIVE_FOLDER_ID") # 已改為環境變數
+DRIVE_FOLDER_ID = os.environ.get("DRIVE_FOLDER_ID")
 MODEL_NAME = "gemini-2.5-flash"
 
 app = FastAPI()
 
-# ✅ 正確寫法（只保留通訊協定與網域）
+# 🔧 新增：紅綠燈排隊機制。限制同時最多只能有 2 個任務運行，保護 512MB 記憶體
+MAX_CONCURRENT_UPLOADS = 2
+upload_semaphore = asyncio.Semaphore(MAX_CONCURRENT_UPLOADS)
+
 ALLOWED_URL = "https://use5566.github.io" 
 
 app.add_middleware(
@@ -38,7 +41,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 可選：首頁路由，讓您點擊網址不會看到 404
 @app.get("/")
 async def root():
     return {"message": "Silomo API 伺服器運作正常！🐾"}
@@ -47,7 +49,6 @@ async def root():
 # 授權與認證函式
 # ═══════════════════════════════════════════════════
 def get_google_credentials():
-    """從環境變數讀取 Google 服務帳戶的 JSON 金鑰"""
     creds_str = os.environ.get("GOOGLE_CREDENTIALS_JSON")
     if not creds_str:
         raise ValueError("伺服器缺少 GOOGLE_CREDENTIALS_JSON 環境變數")
@@ -71,13 +72,11 @@ def get_drive_service():
 # 背景任務：上傳至 Google Drive
 # ═══════════════════════════════════════════════════
 def upload_to_drive_background(file_path: str, file_name: str, mime_type: str):
-    """在背景執行，不影響前端回應速度"""
     try:
         drive_service = get_drive_service()
         file_metadata = {'name': file_name, 'parents': [DRIVE_FOLDER_ID]}
         media = MediaFileUpload(file_path, mimetype=mime_type, resumable=True)
         
-        # 🔧【重點修正】：加入 supportsAllDrives=True 才能存取「共用雲端硬碟」
         drive_service.files().create(
             body=file_metadata, 
             media_body=media, 
@@ -89,7 +88,6 @@ def upload_to_drive_background(file_path: str, file_name: str, mime_type: str):
     except Exception as e:
         print(f"❌ Google Drive 備份失敗: {e}")
     finally:
-        # 上傳完畢後刪除本機暫存檔
         if os.path.exists(file_path):
             os.remove(file_path)
 
@@ -102,7 +100,6 @@ def upload_video_to_gemini(client, file_path: str, mime_type: str, display_name:
         config=types.UploadFileConfig(mime_type=mime_type, display_name=display_name)
     )
     
-    # 輪詢等待處理完成
     attempts = 0
     while video_file.state.name == "PROCESSING" and attempts < 20:
         time.sleep(3)
@@ -138,7 +135,6 @@ def call_gemini(system_instruction: str, contents: list):
     }
 
 def clean_json_response(text: str):
-    """清理可能包在 Markdown 裡的 JSON"""
     text = text.strip()
     if text.startswith("```json"):
         text = text[7:]
@@ -160,81 +156,82 @@ async def analyze_video(
     videoName: str = Form(...)
 ):
     try:
-        # 1. 將上傳檔案存入系統暫存區 (分塊寫入保護記憶體)
-        ext = os.path.splitext(file.filename)[1]
-        with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as temp_file:
-            while content := await file.read(1024 * 1024): # 每次 1MB
-                temp_file.write(content)
-            temp_path = temp_file.name
-
-        # 2. 將 Google Drive 備份放入背景任務
-        background_tasks.add_task(upload_to_drive_background, temp_path, videoName, file.content_type)
-
-        # 3. 傳給 Gemini
-        client = genai.Client(api_key=GEMINI_API_KEY)
-        gemini_file = upload_video_to_gemini(client, temp_path, file.content_type, videoName)
-
-        # 4. 要求 Gemini 分析
-        system_instruction = (
-            "你是一隻名叫 Silomo 的白色波斯貓，也是一位「專業的科學教育專家」。你的任務是引導國小生思考。\n"
-            "【重要】嚴格使用 JSON 格式：{\"summary\": \"說明\", \"details\": [{\"point\": \"標題\", \"description\": \"內容\"}]}\n"
-            "【警告】必須「極度精簡」，details 最多 3 點，每點 20-30 字以內，絕對不可長篇大論！\n"
-            "【特別注意】分析影片時，只要白煙有符合理論的移動趨勢即視為對流發生，不須要求完美的封閉循環，也不須批評器材。如果學生問了與科學實驗無關的話題，不要回答。"
-        )
-        
-        prompt = (
-            f"這是一部名為「{videoName}」的氣體對流實驗影片。紅色點的瓶子代表熱空氣(熱瓶)；藍色點的瓶子代表冷空氣(冷瓶)，其中一瓶會有煙。\n"
-            "理論組合：\n"
-            "(1) 熱瓶在上加煙、冷瓶在下無煙：不對流。煙微沉。\n"
-            "(2) 熱瓶在下加煙、冷瓶在上無煙：會對流。煙向上。\n"
-            "(3) 熱瓶在上無煙、冷瓶在下加煙：不對流。煙不動。\n"
-            "(4) 熱瓶在下無煙、冷瓶在上加煙：會對流。煙向下。\n\n"
-            "請判斷實驗屬於哪種配置、白煙是否符合理論，並給予簡短正向回饋。"
-        )
-
-        contents = [
-            types.Part.from_uri(file_uri=gemini_file.uri, mime_type=gemini_file.mime_type),
-            prompt
-        ]
-
-        ai_res = call_gemini(system_instruction, contents)
-        
-        # 5. 解析回應與準備儲存資料
-        clean_text = clean_json_response(ai_res["text"])
-        try:
-            ai_data = json.loads(clean_text)
-            summary = ai_data.get("summary", "分析完成！")
-            details = ai_data.get("details", [])
+        # 🔧 新增：進入排隊管制區，超過 2 人同時上傳就在這裡等待
+        async with upload_semaphore:
             
-            details_text = " / ".join([f"【{d.get('point','')}】{d.get('description','')}" for d in details])
-            sheet_reply = f"{summary}｜{details_text}" if details else summary
+            ext = os.path.splitext(file.filename)[1]
+            with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as temp_file:
+                while content := await file.read(1024 * 1024): 
+                    temp_file.write(content)
+                temp_path = temp_file.name
+
+            background_tasks.add_task(upload_to_drive_background, temp_path, videoName, file.content_type)
+
+            client = genai.Client(api_key=GEMINI_API_KEY)
+            gemini_file = upload_video_to_gemini(client, temp_path, file.content_type, videoName)
+
+            system_instruction = (
+                "你是一隻名叫 Silomo 的白色波斯貓，也是一位「專業的科學教育專家」。你的任務是引導國小生思考。\n"
+                "【重要】嚴格使用 JSON 格式：{\"summary\": \"說明\", \"details\": [{\"point\": \"標題\", \"description\": \"內容\"}]}\n"
+                "【警告】必須「極度精簡」，details 最多 3 點，每點 20-30 字以內，絕對不可長篇大論！\n"
+                "【特別注意】分析影片時，只要白煙有符合理論的移動趨勢即視為對流發生，不須要求完美的封閉循環，也不須批評器材。如果學生問了與科學實驗無關的話題，不要回答。"
+            )
             
-            html_details = "".join([f"<li><b>{d.get('point','')}：</b>{d.get('description','')}</li>" for d in details])
-            display_text = f"<p>{summary}</p><ul>{html_details}</ul>" if details else f"<p>{summary}</p>"
-        except:
-            sheet_reply = clean_text
-            display_text = f"<p>{clean_text}</p>"
+            prompt = (
+                f"這是一部名為「{videoName}」的氣體對流實驗影片。紅色點的瓶子代表熱空氣(熱瓶)；藍色點的瓶子代表冷空氣(冷瓶)，其中一瓶會有煙。\n"
+                "理論組合：\n"
+                "(1) 熱瓶在上加煙、冷瓶在下無煙：不對流。煙微沉。\n"
+                "(2) 熱瓶在下加煙、冷瓶在上無煙：會對流。煙向上。\n"
+                "(3) 熱瓶在上無煙、冷瓶在下加煙：不對流。煙不動。\n"
+                "(4) 熱瓶在下無煙、冷瓶在上加煙：會對流。煙向下。\n\n"
+                "請判斷實驗屬於哪種配置、白煙是否符合理論，並給予簡短正向回饋。"
+            )
 
-        # 6. 寫入 Google Sheet
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        row_data = [
-            timestamp, classNum, members, videoName, sheet_reply,
-            "", "", "", "", "", "", "", "", ai_res["input_tokens"], ai_res["output_tokens"]
-        ]
-        
-        gc = get_gspread_client()
-        sheet = gc.open_by_key(SPREADSHEET_ID).sheet1
-        sheet.append_row(row_data)
+            contents = [
+                types.Part.from_uri(file_uri=gemini_file.uri, mime_type=gemini_file.mime_type),
+                prompt
+            ]
 
-        return {
-            "status": "success",
-            "video_analysis_html": display_text,
-            "video_analysis_text": sheet_reply,
-            "gemini_file": {"uri": gemini_file.uri, "mimeType": gemini_file.mime_type}
-        }
+            ai_res = call_gemini(system_instruction, contents)
+            
+            clean_text = clean_json_response(ai_res["text"])
+            try:
+                ai_data = json.loads(clean_text)
+                summary = ai_data.get("summary", "分析完成！")
+                details = ai_data.get("details", [])
+                
+                details_text = " / ".join([f"【{d.get('point','')}】{d.get('description','')}" for d in details])
+                sheet_reply = f"{summary}｜{details_text}" if details else summary
+                
+                html_details = "".join([f"<li><b>{d.get('point','')}：</b>{d.get('description','')}</li>" for d in details])
+                display_text = f"<p>{summary}</p><ul>{html_details}</ul>" if details else f"<p>{summary}</p>"
+            except:
+                sheet_reply = clean_text
+                display_text = f"<p>{clean_text}</p>"
+
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            row_data = [
+                timestamp, classNum, members, videoName, sheet_reply,
+                "", "", "", "", "", "", "", "", ai_res["input_tokens"], ai_res["output_tokens"]
+            ]
+            
+            gc_client = get_gspread_client()
+            sheet = gc_client.open_by_key(SPREADSHEET_ID).sheet1
+            sheet.append_row(row_data)
+
+            return {
+                "status": "success",
+                "video_analysis_html": display_text,
+                "video_analysis_text": sheet_reply,
+                "gemini_file": {"uri": gemini_file.uri, "mimeType": gemini_file.mime_type}
+            }
 
     except Exception as e:
         return {"status": "error", "message": str(e)}
+    
+    finally:
+        # 🔧 新增：無論成功或失敗，結束時強制倒垃圾，釋放記憶體
+        gc.collect()
 
 # ═══════════════════════════════════════════════════
 # API 路由 2：處理聊天
@@ -257,11 +254,9 @@ async def chat(req: ChatRequest):
         contents = []
         gemini_file = req.userInfo.get("geminiFile")
         
-        # 🔧【重點修正】：使用 SDK 專屬的 types.Content 與 types.Part 解決 Pydantic 錯誤
         for idx, item in enumerate(req.conversationHistory):
             parts = []
             
-            # 第一回合的 user 訊息，加入影片實體
             if idx == 0 and item["role"] == "user" and gemini_file:
                 parts.append(
                     types.Part.from_uri(
@@ -270,16 +265,12 @@ async def chat(req: ChatRequest):
                     )
                 )
             
-            # 加入文字訊息
             parts.append(types.Part.from_text(text=item["parts"]))
-            
-            # 組裝成標準的 Content 物件
             role = "user" if item["role"] == "user" else "model"
             contents.append(types.Content(role=role, parts=parts))
             
         ai_res = call_gemini(system_instruction, contents)
         
-        # 解析回應
         clean_text = clean_json_response(ai_res["text"])
         try:
             ai_data = json.loads(clean_text)
@@ -290,17 +281,15 @@ async def chat(req: ChatRequest):
         except:
             sheet_reply = clean_text
 
-        # 更新 Google Sheet
-        gc = get_gspread_client()
-        sheet = gc.open_by_key(SPREADSHEET_ID).sheet1
+        gc_client = get_gspread_client()
+        sheet = gc_client.open_by_key(SPREADSHEET_ID).sheet1
         all_records = sheet.get_all_values()
         
         target_row = -1
-        # 由下往上找
         for i in range(len(all_records) - 1, -1, -1):
             row = all_records[i]
             if len(row) >= 4 and row[1] == req.userInfo["classNum"] and row[2] == req.userInfo["members"] and row[3] == req.userInfo["videoName"]:
-                target_row = i + 1 # gspread 是 1-based
+                target_row = i + 1 
                 break
                 
         if target_row != -1:
@@ -323,3 +312,7 @@ async def chat(req: ChatRequest):
 
     except Exception as e:
         return {"status": "error", "message": str(e)}
+        
+    finally:
+        # 🔧 新增：聊天結束也順手倒垃圾
+        gc.collect()

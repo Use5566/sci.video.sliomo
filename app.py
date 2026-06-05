@@ -28,7 +28,7 @@ MODEL_NAME = "gemini-2.5-flash"
 app = FastAPI()
 
 # 🔧 新增：紅綠燈排隊機制。限制同時最多只能有 2 個任務運行，保護 512MB 記憶體
-MAX_CONCURRENT_UPLOADS = 2
+MAX_CONCURRENT_UPLOADS = 4
 upload_semaphore = asyncio.Semaphore(MAX_CONCURRENT_UPLOADS)
 
 ALLOWED_URL = "https://use5566.github.io" 
